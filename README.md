@@ -1,3 +1,3 @@
-## OnDemand/Passenger: Flask example app
+## OnDemand app for Getusage
 
-This is a [Flask](http://flask.pocoo.org/) hello world example app for [the Passenger application server](https://www.phusionpassenger.com/) that has been modified to work with [OnDemand](https://openondemand.org/).
+A web frontend for Getusage that can be launched from OOD. 

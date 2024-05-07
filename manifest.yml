@@ -1,5 +1,5 @@
 ---
-name: Hello Python
-category: Jobs
+name: Getusage 
+category: Utilities
 description: |-
-  Example Python application using Flask.
+  Display group utilization of YCRC resources.
