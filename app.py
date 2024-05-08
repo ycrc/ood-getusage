@@ -1,27 +1,32 @@
+
+
 from dash import Dash, html, dcc, callback, Output, Input
 import plotly.express as px
 import plotly.graph_objects as go
 from dash.exceptions import PreventUpdate
+import flask
 
 import pandas as pd
 from pymongo import MongoClient
 
-markdown_text = '''
-# YCRC CPU-hour Usage
-Time-dependent usage metrics for YCRC clusters, in `cpu_hours`.
-See our [docs page](http://docs.ycrc.yale.edu) for more information.
-'''
+import os, subprocess
 
-app = Dash(__name__)
+
+
+user = os.getenv('USER')
+tmp = subprocess.run([f"/opt/slurm/current/bin/sacctmgr -P -n show user {user} format=DefaultAccount"], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
+account = tmp.stdout.strip()
+
+
+server = flask.Flask(__name__)
+app = Dash(server=server, requests_pathname_prefix="/pun/sys/ood-getusage/")
 
 app.layout = html.Div([
-    html.Div(children=[dcc.Markdown(markdown_text)]),
+    html.Div(html.H1(f'{account} Group CPU-Hour Usage:')),
+    html.Div(html.P(f"Aggregated utilization (in cpu-hours) for all YCRC Clusters for the {account} group for {user}.")),
     html.Div(children=[
-        html.Label('Account'),
-        dcc.Input(id='Account', type='text', placeholder='Account', debounce=True),
-
         html.Br(),
-        dcc.RadioItems(id='View', options=['Partition', 'User']),
+        dcc.RadioItems(id='View', options=['Partition', 'User'], value='Partition'),
         ], style={'padding': 10, 'flex': 1}),
 
     dcc.Graph(id='graph-content')
@@ -31,12 +36,11 @@ app.layout = html.Div([
 
 @callback(
     Output('graph-content', 'figure'),
-    Input('Account', 'value'),
     Input('View', 'value'),
 )
-def update_graph(account,view):
+def update_graph(view):
 
-    if account is None or view is None:
+    if view is None:
         raise PreventUpdate
     else:
 
@@ -66,4 +70,7 @@ def update_graph(account,view):
         return px.line(dff,x=dff.index, y='cpu_hours', color=view)
 
 if __name__ == '__main__':
-    app.run()
+    app.run(host='172.28.220.190', port='8080', debug=True)
+
+#if __name__ == "__main__":
+#    run_simple("localhost", 8050, application)
