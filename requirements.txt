@@ -4,3 +4,4 @@
 dash
 pymongo
 pandas
+dash_bootstrap_components

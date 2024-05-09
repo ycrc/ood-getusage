@@ -1,8 +1,8 @@
-
-
 from dash import Dash, html, dcc, callback, Output, Input
 import plotly.express as px
+from plotly.subplots import make_subplots
 import plotly.graph_objects as go
+import dash_bootstrap_components as dbc
 from dash.exceptions import PreventUpdate
 import flask
 
@@ -12,18 +12,20 @@ from pymongo import MongoClient
 import os, subprocess
 
 
-
+# determine which group to show usage from (currently the Slurm default group, but
 user = os.getenv('USER')
-tmp = subprocess.run([f"/opt/slurm/current/bin/sacctmgr -P -n show user {user} format=DefaultAccount"], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
-account = tmp.stdout.strip()
+tmp = subprocess.run([f"/opt/slurm/current/bin/sacctmgr -P -n show association where users={user} format='account'"], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
+account = tmp.stdout.split('\n')
 
 
 server = flask.Flask(__name__)
-app = Dash(server=server, requests_pathname_prefix="/pun/sys/ood-getusage/")
+# start Dash instance, needs the OOD prefix to properly set up React. This should be fixable to not be hard-coded...
+app = Dash(server=server, requests_pathname_prefix="/pun/sys/ood-getusage/", external_stylesheets=[dbc.themes.MORPH])
 
 app.layout = html.Div([
-    html.Div(html.H1(f'{account} Group CPU-Hour Usage:')),
-    html.Div(html.P(f"Aggregated utilization (in cpu-hours) for all YCRC Clusters for the {account} group for {user}.")),
+    html.Div(html.H1(f'YCRC Cluster Usage:')),
+    dcc.Dropdown(account, account[0], id="Account", placeholder="Account"),
+    html.Div(html.P(f"Aggregated utilization (in cpu-hours) for all YCRC Clusters.")),
     html.Div(children=[
         html.Br(),
         dcc.RadioItems(id='View', options=['Partition', 'User'], value='Partition'),
@@ -37,10 +39,11 @@ app.layout = html.Div([
 @callback(
     Output('graph-content', 'figure'),
     Input('View', 'value'),
+    Input('Account', 'value'),
 )
-def update_graph(view):
+def update_graph(view, account):
 
-    if view is None:
+    if view is None or account is None:
         raise PreventUpdate
     else:
 
@@ -52,7 +55,6 @@ def update_graph(view):
 
         # build query
         query = {"metadata.Account":account}
-        df = usage.find(query)
 
         # submit query and convert into dataframe
         df = pd.DataFrame(list(usage.find(query)))
@@ -61,16 +63,17 @@ def update_graph(view):
         df = pd.concat([df[['timestamp','cpu_hours']],pd.DataFrame.from_records(df['metadata'])], axis=1)
 
         df.rename(columns={'timestamp':'date'}, inplace=True)
-        df = df.set_index('date')
-        df = df.sort_index()
 
+        #df = df.set_index('date')
+        #df = df.sort_index()
+        #dff = df.groupby([pd.Grouper(freq='ME'), view]).cpu_hours.sum()
+        #dff = dff.reset_index().set_index('date')
+        #fig = px.bar(dff,x=dff.index, y='cpu_hours', color=view, title='Monthly Usage (cpu-hours)')
 
-        dff = df.groupby([pd.Grouper(freq='d'), view]).cpu_hours.sum()
-        dff = dff.reset_index().set_index('date')
-        return px.line(dff,x=dff.index, y='cpu_hours', color=view)
+        fig = px.histogram(df, x="date", y="cpu_hours", color=view, histfunc="sum", title=f"{account} monthly usage")
+        fig.update_traces(xbins_size="M1")
+        fig.update_xaxes(showgrid=True, ticklabelmode="period", dtick="M1", tickformat="%b\n%Y")
+        fig.update_layout(bargap=0.1)
 
-if __name__ == '__main__':
-    app.run(host='172.28.220.190', port='8080', debug=True)
+        return fig
 
-#if __name__ == "__main__":
-#    run_simple("localhost", 8050, application)
