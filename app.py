@@ -8,6 +8,8 @@ import flask
 
 import pandas as pd
 from pymongo import MongoClient
+import numpy as np
+
 
 import os, subprocess
 
@@ -20,24 +22,29 @@ account = tmp.stdout.split('\n')
 
 server = flask.Flask(__name__)
 # start Dash instance, needs the OOD prefix to properly set up React. This should be fixable to not be hard-coded...
-app = Dash(server=server, requests_pathname_prefix="/pun/sys/ood-getusage/", external_stylesheets=[dbc.themes.MORPH])
+app = Dash(server=server, requests_pathname_prefix="/pun/sys/ood-getusage/", external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 app.layout = html.Div([
-    html.Div(html.H1(f'YCRC Cluster Usage:')),
-    dcc.Dropdown(account, account[0], id="Account", placeholder="Account"),
-    html.Div(html.P(f"Aggregated utilization (in cpu-hours) for all YCRC Clusters.")),
-    html.Div(children=[
-        html.Br(),
-        dcc.RadioItems(id='View', options=['Partition', 'User'], value='Partition'),
-        ], style={'padding': 10, 'flex': 1}),
+    dbc.Row(dbc.Col(html.H1("YCRC Cluster Usage"), width={"size":6, "offset":1})),
+    dbc.Row(dbc.Col(dcc.Dropdown(account, account[0], id='Account'), width={"size":6, "offset":1})),
+    dbc.Row([
+        dbc.Col(dcc.Dropdown(["Partition","User"], "Partition", id='View',), width=2, align='center'),
+        dbc.Col(dcc.Graph(id='monthly'), width=8),
+        ], justify='center'
+    ),
+    dbc.Row(
+        [dbc.Col(html.Div(id='table'), width='auto'),
+        dbc.Col(dcc.Graph(id='starburst'), width=6)],
+        justify='center',
+    ),
 
-    dcc.Graph(id='graph-content')
-], style={'display': 'flex', 'flexDirection': 'column'})
-
+])
 
 
 @callback(
-    Output('graph-content', 'figure'),
+    Output('monthly', 'figure'),
+    Output('starburst', 'figure'),
+    Output('table', 'children'),
     Input('View', 'value'),
     Input('Account', 'value'),
 )
@@ -63,17 +70,32 @@ def update_graph(view, account):
         df = pd.concat([df[['timestamp','cpu_hours']],pd.DataFrame.from_records(df['metadata'])], axis=1)
 
         df.rename(columns={'timestamp':'date'}, inplace=True)
+        df['Commons'] = np.where(df['Partition'].str.contains('pi_|ycga|psych')==False, df['cpu_hours'], 0)
+        df['Scavenge'] = np.where(df['Partition'].str.contains('scavenge')==True, df['cpu_hours'], 0)
+        df['PI'] = np.where(df['Partition'].str.contains('pi_|ycga|psych')==True, df['cpu_hours'], 0)
 
-        #df = df.set_index('date')
-        #df = df.sort_index()
-        #dff = df.groupby([pd.Grouper(freq='ME'), view]).cpu_hours.sum()
-        #dff = dff.reset_index().set_index('date')
-        #fig = px.bar(dff,x=dff.index, y='cpu_hours', color=view, title='Monthly Usage (cpu-hours)')
+        fig1 = px.histogram(df, x="date", y="cpu_hours", color=view, histfunc="sum", title=f"{account} monthly usage")
+        fig1.update_traces(xbins_size="M1")
+        fig1.update_xaxes(showgrid=True, ticklabelmode="period", dtick="M1", tickformat="%b\n%Y")
+        fig1.update_layout(bargap=0.1)
 
-        fig = px.histogram(df, x="date", y="cpu_hours", color=view, histfunc="sum", title=f"{account} monthly usage")
-        fig.update_traces(xbins_size="M1")
-        fig.update_xaxes(showgrid=True, ticklabelmode="period", dtick="M1", tickformat="%b\n%Y")
-        fig.update_layout(bargap=0.1)
+        df.date = pd.to_datetime(df.date)
+        df = df.set_index('date')
+        df = df.sort_index()
+        dff = df.groupby([pd.Grouper(freq='ME'), 'User','Partition']).cpu_hours.sum()
+        dff = dff.reset_index()
+        fig2 = px.sunburst(dff, path=['date', 'Partition', 'User'], values='cpu_hours', color='date')
 
-        return fig
+
+        dff = df.groupby([pd.Grouper(freq='ME')])[['cpu_hours','Commons','PI','Scavenge']].sum()
+        dff = dff.reset_index()
+        dff = dff.sort_values(by='date')
+        dff.date = dff.date.dt.strftime('%Y-%m')
+        dff = dff.rename(columns={'cpu_hours':'Total'})
+        dff.Total = dff.Total.apply(lambda x: f'{x:.1f}')
+        dff.Commons = dff.Commons.apply(lambda x: f'{x:.1f}')
+        dff.PI = dff.PI.apply(lambda x: f'{x:.1f}')
+        dff.Scavenge = dff.Scavenge.apply(lambda x: f'{x:.1f}')
+
+        return fig1, fig2, dbc.Table.from_dataframe(dff, striped=True, bordered=True, hover=True)
 
