@@ -24,20 +24,48 @@ server = flask.Flask(__name__)
 # start Dash instance, needs the OOD prefix to properly set up React. This should be fixable to not be hard-coded...
 app = Dash(server=server, requests_pathname_prefix="/pun/sys/ood-getusage/", external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-app.layout = html.Div([
-    dbc.Row(dbc.Col(html.H1("YCRC Cluster Usage"), width={"size":6, "offset":1})),
-    dbc.Row(dbc.Col(dcc.Dropdown(account, account[0], id='Account'), width={"size":6, "offset":1})),
+# Controls
+controls = dbc.Card(
+    [
+        html.Div(
+            [
+                dbc.Label("Account"),
+                dcc.Dropdown(
+                    id="Account",
+                    options=account,
+                    value=account[0],
+                ),
+            ]
+        ),
+        html.Div(
+            [
+                dbc.Label("View"),
+                dcc.Dropdown(
+                    id="View",
+                    options=["Partition", "User"],
+                    value="Partition",
+                ),
+            ]
+        ),
+    ],
+    body=True,
+)
+
+# Main layout
+app.layout = dbc.Container([
+    html.H1("YCRC Cluster Usage"),
+    html.Hr(),
     dbc.Row([
-        dbc.Col(dcc.Dropdown(["Partition","User"], "Partition", id='View',), width=2, align='center'),
-        dbc.Col(dcc.Graph(id='monthly'), width=8),
-        ], justify='center'
+        dbc.Col(controls, md=4),
+        dbc.Col(dcc.Graph(id='monthly'), md=8),
+        ], align='center'
     ),
+    html.Hr(),
     dbc.Row(
-        [dbc.Col(html.Div(id='table'), width='auto'),
-        dbc.Col(dcc.Graph(id='starburst'), width=6)],
+        [dbc.Col(html.Div(id='table'), md=5),
+        dbc.Col(dcc.Graph(id='starburst'), md=7)],
         justify='center',
     ),
-
 ])
 
 
@@ -74,7 +102,7 @@ def update_graph(view, account):
         df['Scavenge'] = np.where(df['Partition'].str.contains('scavenge')==True, df['cpu_hours'], 0)
         df['PI'] = np.where(df['Partition'].str.contains('pi_|ycga|psych')==True, df['cpu_hours'], 0)
 
-        fig1 = px.histogram(df, x="date", y="cpu_hours", color=view, histfunc="sum", title=f"{account} monthly usage")
+        fig1 = px.histogram(df, x="date", y="cpu_hours", color=view, histfunc="sum")
         fig1.update_traces(xbins_size="M1")
         fig1.update_xaxes(showgrid=True, ticklabelmode="period", dtick="M1", tickformat="%b\n%Y")
         fig1.update_layout(bargap=0.1)
