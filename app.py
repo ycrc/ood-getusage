@@ -17,11 +17,11 @@ import os, subprocess
 meas_label = {"CPU Hours":"cpu_hours", "GPU Hours":"gpu_hours", "Service Units":"service_units"}
 
 #---------------------------------------------------
-# determine which group to show usage from (currently the Slurm default group, but
+# determine which accounts to show usage from 
 user = os.getenv('USER')
-tmp = subprocess.run([f"/opt/slurm/current/bin/sacctmgr -P -n show association where users={user} format='account'"], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
+cmd = f"/opt/slurm/current/bin/sacctmgr -P -n show association where users={user} format='account'"
+tmp = subprocess.run([cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
 account = tmp.stdout.split('\n')
-
 
 #---------------------------------------------------
 server = flask.Flask(__name__)
@@ -36,8 +36,6 @@ conn = MongoClient(mongo_url)
 db = conn.getusage
 usage = db.usage
 usage_log = db.usage_log
-
-
 
 # build query
 query = {"metadata.Account": {'$in':account}}
@@ -56,20 +54,16 @@ for c in ['Account','Cluster','User','Partition']:
 for c in ['cpu_hours']:
     df[c] = df[c].astype('float32')
 
+df = df.set_index('date')
+df = df.sort_index()
+df = df.groupby([pd.Grouper(freq='ME'),'Account','Cluster','User','Partition']).cpu_hours.sum()
+df = df.reset_index()
+df = df.set_index('date')
+
 #---------------------------------------------------
 # Controls
 controls = dbc.Card(
     [
-        html.Div(
-            [
-                dbc.Label("Account"),
-                dcc.Dropdown(
-                    id="Account",
-                    options=account,
-                    value=account[0],
-                ),
-            ]
-        ),
         html.Div(
             [
                 dbc.Label("View"),
@@ -77,6 +71,16 @@ controls = dbc.Card(
                     id="View",
                     options=["Partition", "User"],
                     value="Partition",
+                ),
+            ]
+        ),
+        html.Div(
+            [
+                dbc.Label("Partition Type"),
+                dcc.Dropdown(
+                    id="partition_class",
+                    options=["All", "Commons", "Private", "Scavenge"],
+                    value="All",
                 ),
             ]
         ),
@@ -91,16 +95,7 @@ controls = dbc.Card(
                 ),
             ]
         ),
-        html.Div(
-            [
-                dbc.Label("Partition Type"),
-                dcc.Dropdown(
-                    id="partition_class",
-                    options=["All", "Commons", "Private", "Scavenge"],
-                    value="All",
-                ),
-            ]
-        ),
+
     ],
     body=True,
 )
@@ -108,14 +103,35 @@ controls = dbc.Card(
 # Main layout
 app.layout = dbc.Container([
     html.H1("YCRC Cluster Usage"),
-    html.P("Utilization across all YCRC clusters."),
+    dbc.Row(
+        [
+        dbc.Col(dbc.Label(html.H4("Account:")), width='auto'),
+        dbc.Col(dcc.Dropdown(
+            id="Account",
+            options=account,
+            value=account[0],
+        ), width=5),
+        dbc.Col(
+            [
+                html.Button("Download CSV", id='btn_csv'),
+                dcc.Download(id='download-df'),
+            ],
+        ),
+        ]
+    ),
     html.Hr(),
     html.H2('Usage Summary'),
+    html.P("Latest month is in-progress (data updated daily at midnight)"),
     html.Br(),
     dbc.Row([
-        dbc.Col(html.Div(id='table'), md=5),
-        dbc.Col(dcc.Graph(id='starburst'), md=7),
-        ], justify='center',
+        dbc.Col(dbc.Label(html.H4("Monthly Breakdown")),md=6),
+        dbc.Col(dbc.Label(html.H4("User Breakdown")), md=5),
+        ], justify='evenly',
+    ),
+    dbc.Row([
+        dbc.Col(html.Div(id='table_monthly'), md=6),
+        dbc.Col(html.Div(id='table_user'), md=5, style={"maxHeight":"570px", "overflow":"scroll"}),
+        ], justify='evenly',
     ),
     html.Hr(),
     html.Br(),
@@ -128,18 +144,40 @@ app.layout = dbc.Container([
     html.Hr(),
 ])
 
+#---------------------------------------------------
+@callback(
+    Output('download-df', 'data'),
+    Input('btn_csv',"n_clicks"),
+    prevent_initial_call=True,
+)
+def download_df(n_clicks):
+    global df
+    cols = []
+    if df.Account.nunique() > 1:
+        cols.append('Account')
+    elif df.Cluster.nunique() > 1:
+        cols.append('Cluster')
+    cols += ["Partition","User","cpu_hours"]
+    tmp = df[cols]
+    tmp = tmp.reset_index()
+    tmp = tmp.sort_values(by='date')
+    tmp.date = tmp.date.dt.strftime('%Y-%m')
+    tmp.cpu_hours = tmp.cpu_hours.apply(lambda x: f'{x:.1f}')
+    return dcc.send_data_frame(tmp.to_csv, "usage_report.csv", encoding='utf-8', index=False)
+
+
 
 #---------------------------------------------------
 @callback(
     Output('monthly', 'figure'),
-    Output('starburst', 'figure'),
-    Output('table', 'children'),
+    Output('table_monthly', 'children'),
+    Output('table_user', 'children'),
     Input('View', 'value'),
     Input('Account', 'value'),
     Input('Units', 'value'),
     Input('partition_class','value'),
 )
-def update_graph(view, account, units, partition_class):
+def update(view, account, units, partition_class):
 
     # bring in data frame
     global df
@@ -157,28 +195,24 @@ def update_graph(view, account, units, partition_class):
         tmp['PI'] = np.where(tmp['Partition'].str.contains('pi_|ycga|psych')==True, tmp[meas], 0)
 
         if partition_class=="Commons":
-            dff = tmp[tmp.Partition.str.contains('pi_')==False]
+            dff = tmp[tmp.Partition.str.contains('pi_|ycga|psych')==False]
         elif partition_class=="Private":
-            dff = tmp[tmp.Partition.str.contains('pi_')==True]
+            dff = tmp[tmp.Partition.str.contains('pi_|ycga|psych')==True]
         elif partition_class=="Scavenge":
             dff = tmp[tmp.Partition.str.contains('scavenge')==True]
         else:
             dff = tmp
 
-        fig1 = px.histogram(dff, x="date", y=meas, color=view, histfunc="sum")
+        fig1 = px.histogram(dff, x=dff.index, y=meas, color=view, histfunc="sum")
         fig1.update_traces(xbins_size="M1")
         fig1.update_xaxes(showgrid=True, ticklabelmode="period", dtick="M1", tickformat="%b\n%Y")
         fig1.update_layout(bargap=0.1)
 
-        tmp.date = pd.to_datetime(tmp.date)
-        tmp = tmp.set_index('date')
-        tmp = tmp.sort_index()
-        dff = tmp.groupby([pd.Grouper(freq='ME'), 'User','Partition'], observed=True).cpu_hours.sum()
-        dff = dff.reset_index()
-        fig2 = px.sunburst(dff, path=['date', 'Partition', 'User'], values=meas, color='date')
+        # tmp.date = pd.to_datetime(tmp.date)
+        # tmp = tmp.set_index('date')
+        # tmp = tmp.sort_index()
 
-
-        dff = tmp.groupby([pd.Grouper(freq='ME')], observed=True)[[meas,'Commons','PI','Scavenge']].sum()
+        dff = tmp.groupby([pd.Grouper(freq='ME')])[[meas,'Commons','PI','Scavenge']].sum()
         dff = dff.reset_index()
         dff = dff.sort_values(by='date')
         dff.date = dff.date.dt.strftime('%Y-%m')
@@ -187,6 +221,17 @@ def update_graph(view, account, units, partition_class):
         dff.Commons = dff.Commons.apply(lambda x: f'{x:.1f}')
         dff.PI = dff.PI.apply(lambda x: f'{x:.1f}')
         dff.Scavenge = dff.Scavenge.apply(lambda x: f'{x:.1f}')
+        t_m = dbc.Table.from_dataframe(dff, striped=True, bordered=True, hover=True)
 
-        return fig1, fig2, dbc.Table.from_dataframe(dff, striped=True, bordered=True, hover=True)
+        dff = tmp.groupby(['User'])[[meas,'Commons','PI','Scavenge']].sum()
+        dff = dff.reset_index()
+        dff = dff.sort_values(by='User')
+        dff = dff.rename(columns={meas:'Total'})
+        dff.Total = dff.Total.apply(lambda x: f'{x:.1f}')
+        dff.Commons = dff.Commons.apply(lambda x: f'{x:.1f}')
+        dff.PI = dff.PI.apply(lambda x: f'{x:.1f}')
+        dff.Scavenge = dff.Scavenge.apply(lambda x: f'{x:.1f}')
+        t_u = dbc.Table.from_dataframe(dff, striped=True, bordered=True, hover=True)
+
+        return fig1, t_m, t_u 
 
