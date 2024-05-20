@@ -124,8 +124,8 @@ app.layout = dbc.Container([
     html.P("Latest month is in-progress (data updated daily at midnight)."),
     html.Br(),
     dbc.Row([
-        dbc.Col(dbc.Label(html.H4("Monthly Breakdown")),md=6),
-        dbc.Col(dbc.Label(html.H4("User Breakdown")), md=5),
+        dbc.Col(dbc.Label(html.H4("Monthly Breakdown (cpu-hours)")),md=6),
+        dbc.Col(dbc.Label(html.H4("User Breakdown (cpu-hours)")), md=5),
         ], justify='evenly',
     ),
     dbc.Row([
