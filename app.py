@@ -113,7 +113,7 @@ app.layout = dbc.Container([
         ), width=5),
         dbc.Col(
             [
-                html.Button("Download CSV", id='btn_csv'),
+                html.Button("Download Detailed Usage Report", id='btn_csv'),
                 dcc.Download(id='download-df'),
             ],
         ),
@@ -124,8 +124,8 @@ app.layout = dbc.Container([
     html.P("Latest month is in-progress (data updated daily at midnight)."),
     html.Br(),
     dbc.Row([
-        dbc.Col(dbc.Label(html.H4("Monthly Breakdown (cpu-hours)")),md=6),
-        dbc.Col(dbc.Label(html.H4("User Breakdown (cpu-hours)")), md=5),
+        dbc.Col(dbc.Label(html.H4("Usage per Month (cpu-hours)")),md=6),
+        dbc.Col(dbc.Label(html.H4("FY24 Usage per User (cpu-hours)")), md=5),
         ], justify='evenly',
     ),
     dbc.Row([
@@ -216,21 +216,24 @@ def update(view, account, units, partition_class):
         dff = dff.reset_index()
         dff = dff.sort_values(by='date')
         dff.date = dff.date.dt.strftime('%Y-%m')
+        summary = dff.sum()
+        summary['date'] = "Total"
+        dff.loc[len(dff)] = summary
         dff = dff.rename(columns={meas:'Total'})
-        dff.Total = dff.Total.apply(lambda x: f'{x:.1f}')
-        dff.Commons = dff.Commons.apply(lambda x: f'{x:.1f}')
-        dff.PI = dff.PI.apply(lambda x: f'{x:.1f}')
-        dff.Scavenge = dff.Scavenge.apply(lambda x: f'{x:.1f}')
+        dff.Total = dff.Total.apply(lambda x: f'{x:,.1f}')
+        dff.Commons = dff.Commons.apply(lambda x: f'{x:,.1f}')
+        dff.PI = dff.PI.apply(lambda x: f'{x:,.1f}')
+        dff.Scavenge = dff.Scavenge.apply(lambda x: f'{x:,.1f}')
         t_m = dbc.Table.from_dataframe(dff, striped=True, bordered=True, hover=True)
 
         dff = tmp.groupby(['User'])[[meas,'Commons','PI','Scavenge']].sum()
         dff = dff.reset_index()
         dff = dff.sort_values(by='User')
         dff = dff.rename(columns={meas:'Total'})
-        dff.Total = dff.Total.apply(lambda x: f'{x:.1f}')
-        dff.Commons = dff.Commons.apply(lambda x: f'{x:.1f}')
-        dff.PI = dff.PI.apply(lambda x: f'{x:.1f}')
-        dff.Scavenge = dff.Scavenge.apply(lambda x: f'{x:.1f}')
+        dff.Total = dff.Total.apply(lambda x: f'{x:,.1f}')
+        dff.Commons = dff.Commons.apply(lambda x: f'{x:,.1f}')
+        dff.PI = dff.PI.apply(lambda x: f'{x:,.1f}')
+        dff.Scavenge = dff.Scavenge.apply(lambda x: f'{x:,.1f}')
         t_u = dbc.Table.from_dataframe(dff, striped=True, bordered=True, hover=True)
 
         return fig1, t_m, t_u 
