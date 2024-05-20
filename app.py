@@ -17,7 +17,7 @@ import os, subprocess
 meas_label = {"CPU Hours":"cpu_hours", "GPU Hours":"gpu_hours", "Service Units":"service_units"}
 
 #---------------------------------------------------
-# determine which accounts to show usage from 
+# determine which accounts to show usage from
 user = os.getenv('USER')
 cmd = f"/opt/slurm/current/bin/sacctmgr -P -n show association where users={user} format='account'"
 tmp = subprocess.run([cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
@@ -26,7 +26,7 @@ account = tmp.stdout.split('\n')
 #---------------------------------------------------
 server = flask.Flask(__name__)
 # start Dash instance, needs the OOD prefix to properly set up React. This should be fixable to not be hard-coded...
-app = Dash(server=server, requests_pathname_prefix="/pun/sys/ood-getusage/", external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = Dash(server=server, requests_pathname_prefix="/pun/sys/ycrc_getusage/", external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 #---------------------------------------------------
 # get data
@@ -236,5 +236,5 @@ def update(view, account, units, partition_class):
         dff.Scavenge = dff.Scavenge.apply(lambda x: f'{x:,.1f}')
         t_u = dbc.Table.from_dataframe(dff, striped=True, bordered=True, hover=True)
 
-        return fig1, t_m, t_u 
+        return fig1, t_m, t_u
 
