@@ -121,7 +121,7 @@ app.layout = dbc.Container([
     ),
     html.Hr(),
     html.H2('Usage Summary'),
-    html.P("Latest month is in-progress (data updated daily at midnight)"),
+    html.P("Latest month is in-progress (data updated daily at midnight)."),
     html.Br(),
     dbc.Row([
         dbc.Col(dbc.Label(html.H4("Monthly Breakdown")),md=6),
@@ -137,8 +137,8 @@ app.layout = dbc.Container([
     html.Br(),
     html.H2("Monthly Breakdown"),
     dbc.Row([
-        dbc.Col(controls, md=4),
-        dbc.Col(dcc.Graph(id='monthly'), md=8),
+        dbc.Col(controls, md=3),
+        dbc.Col(dcc.Graph(id='monthly'), md=9),
         ], align='center'
     ),
     html.Hr(),
