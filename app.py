@@ -152,12 +152,12 @@ app.layout = dbc.Container([
 )
 def download_df(n_clicks):
     global df
-    cols = []
+    cols = ['User']
     if df.Account.nunique() > 1:
         cols.append('Account')
-    elif df.Cluster.nunique() > 1:
+    if df.Cluster.nunique() > 1:
         cols.append('Cluster')
-    cols += ["Partition","User","cpu_hours"]
+    cols += ["Partition","cpu_hours"]
     tmp = df[cols]
     tmp = tmp.reset_index()
     tmp = tmp.sort_values(by='date')
