@@ -61,6 +61,18 @@ df = df.reset_index()
 df = df.set_index('date')
 
 #---------------------------------------------------
+# Navbar
+navbar = dbc.Navbar(
+    dbc.Container(
+        [
+            dbc.Col(dbc.NavbarBrand("YCRC Getusage", style={'font-size': '2rem'})),
+        ]
+    ),
+    color="#00356b",
+    dark=True,
+)
+
+#---------------------------------------------------
 # Controls
 controls = dbc.Card(
     [
@@ -101,11 +113,13 @@ controls = dbc.Card(
 )
 
 # Main layout
-app.layout = dbc.Container([
-    html.H1("YCRC Cluster Usage"),
+app.layout = html.Div([
+    navbar,
+    html.Br(),
+    dbc.Container([
     dbc.Row(
         [
-        dbc.Col(dbc.Label(html.H4("Account:")), width='auto'),
+        dbc.Col(dbc.Label(html.H2("Account:")), width='auto'),
         dbc.Col(dcc.Dropdown(
             id="Account",
             options=account,
@@ -142,8 +156,8 @@ app.layout = dbc.Container([
         ], align='center'
     ),
     html.Hr(),
+]),
 ])
-
 #---------------------------------------------------
 @callback(
     Output('download-df', 'data'),
