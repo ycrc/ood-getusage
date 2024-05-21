@@ -68,7 +68,7 @@ navbar = dbc.Navbar(
             dbc.Col(dbc.NavbarBrand("YCRC Getusage", style={'font-size': '2rem'})),
         ]
     ),
-    color="#00356b",
+    color="#00356b", #hex code for Yale blue
     dark=True,
 )
 
